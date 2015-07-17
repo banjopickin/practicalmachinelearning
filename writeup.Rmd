@@ -1,0 +1,91 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Y. Leng"
+date: "Monday, July 13, 2015"
+output: html_document
+---
+
+This report uses data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants to predict weight lifting manners. A random forest algorithm is applied due to its high accuracy.
+
+##Load and explore the data.
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+```{r}
+if(!file.exists("pml-training.csv")){
+        fileurl1 <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        download.file(fileurl1,"pml-training.csv")
+}
+
+if(!file.exists("pml-testing.csv")){
+        fileurl2 <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(fileurl2,"pml-testing.csv")
+}
+
+traindata<-read.csv("pml-training.csv",na.strings=c("NA","#DIV/0!",""))
+testdata<-read.csv("pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+dim(traindata)
+#subset columns with NA
+nadata<-traindata[,apply(traindata,2,function(x) sum(is.na(x))) !=0]
+#check the proportion of NA in each column of subset data frame. 
+range(sapply(nadata,function(x)sum(is.na(x))/nrow(traindata)))
+
+```
+
+##Clean the data:
+
+1. Removing the NA columns: Columns with NA have very high proportions of NA(at least 97.9%), which indicates that the measurements either have very low sensitivity or some measuring errors.
+
+2. Remove irrelevant columns: The first seven columns are not useful in prediction.
+
+```{r}
+traindata<-traindata[,apply(traindata,2,function(x)sum(is.na(x)))==0]
+traindata<-traindata[,-c(1:7)]
+```
+
+##Split traindata into training set and testing set for cross-validation. 
+
+```{r}
+set.seed(1234)
+trainindex<-createDataPartition(traindata$classe,times=1,p=0.75,list=F)
+training<-traindata[trainindex,]
+testing<-traindata[-trainindex,]
+```
+
+##Train the prediction model
+
+Random forest method is applied on training set. 
+
+```{r,fig.height=8,fig.width=8}
+set.seed(123)
+modelfit<-randomForest(classe ~.,data=training,importance=T)
+varImpPlot(modelfit,type=2)
+modelfit
+```
+
+The result suggests the expected out of sample error rate is 0.43%. 
+
+##Cross-validation
+
+The testing set is used to cross validate the error rate.
+
+```{r}
+prediction<-predict(modelfit,testing)
+confusionMatrix(testing$class,prediction)
+```
+
+The cross-validation yields 0.9951 accuracy, therefore the out of sample error is `r 1-0.9951`, very close to the expected error rate.
+
+##Predict on testdata
+
+Apply this random forest algorithm to the 20 test cases.
+
+```{r}
+names<-names(traindata[,-53])
+testdata<-testdata[c(names,"problem_id")]
+pred<-predict(modelfit,testdata)
+```
+
